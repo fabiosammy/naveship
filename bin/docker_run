@@ -1,0 +1,47 @@
+#!/bin/bash
+
+DIR=$(pwd)
+[ $(basename $DIR) == 'bin' ] && echo "Don't run in bin" && exit -1  
+
+# Variables
+DOCKER_USER="bomberman"
+APP_DIR="/usr/src/app"
+
+# Parameters to docker run
+PARAMS="--rm -it --user=${DOCKER_USER}:${DOCKER_USER} -v /etc/localtime:/etc/localtime:ro -v ${DIR}:${APP_DIR}"
+PARAMS_DISPLAY="-e=\"DISPLAY=unix$DISPLAY\" -e=\"XDG_RUNTIME_DIR=/run/user/1000\" -v /tmp/.X11-unix:/tmp/.X11-unix:rw -v /run/user/1000:/run/user/1000 --privileged"
+PARAMS_LOCK="-v /dev/dri:/dev/dri:rw -v /dev/shm:/dev/shm -v /var/lib/dbus:/var/lib/dbus"
+[ -e "/dev/snd" ] && PARAMS_SOUND="--device /dev/snd:/dev/snd"
+IMAGE="naveship"
+ARENA="${IMAGE}_arena"
+[ $(docker ps | grep $ARENA | wc -l) -gt 0 ] && PARAMS_LINK="--link $ARENA:$ARENA" 
+[ "$(docker images | grep "$IMAGE")" == "" ] && [ "$1" != "clean" ] && docker build -t $IMAGE .
+xhost +
+
+if [ "$1" == "" ] ; then
+  docker run $PARAMS \
+    $PARAMS_DISPLAY \
+    $PARAMS_SOUND \
+    $PARAMS_LINK \
+    --name $IMAGE \
+    $IMAGE
+elif [ "$1" == "arena" ] ; then
+  docker run $PARAMS \
+    $PARAMS_DISPLAY \
+    --name $ARENA \
+    -p 5532:5532 \
+    $IMAGE ruby arena.rb
+elif [ "$1" == "force-build" ] ; then
+  docker build -t $IMAGE .
+elif [ "$1" == "clean" ] ; then
+  docker rm $(docker ps -aq)
+  docker rmi $IMAGE
+else
+  docker run $PARAMS \
+    $PARAMS_DISPLAY \
+    $PARAMS_SOUND \
+    $PARAMS_LINK \
+    $PARAMS_LOCK \
+    $IMAGE $1
+fi
+
